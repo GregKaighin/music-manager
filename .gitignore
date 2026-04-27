@@ -1,0 +1,17 @@
+# Database
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Generated reports
+music_report.html
+
+# OS
+.DS_Store
+Thumbs.db

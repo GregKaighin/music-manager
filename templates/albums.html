@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Albums · Music Manager{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h1 class="page-title">Albums</h1>
+  <p class="text-muted mb-0">Browse and filter your collection by quality</p>
+</div>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3 filter-bar">
+  <input class="form-control" id="q" type="search"
+         placeholder="Search artist or album&hellip;"
+         oninput="applyFilters()"
+         style="max-width:300px">
+  <div class="btn-group">
+    <button class="btn btn-outline-secondary on" onclick="setFilter('all',this)">All</button>
+    <button class="btn btn-outline-secondary"   onclick="setFilter('lossy',this)">Needs Upgrade</button>
+    <button class="btn btn-outline-secondary"   onclick="setFilter('lossless',this)">Lossless Only</button>
+  </div>
+  <span class="text-muted small" id="cnt"></span>
+</div>
+
+<div id="loading" class="alert alert-secondary" style="max-width:360px">
+  Loading albums&hellip;
+</div>
+<div id="empty" class="alert alert-secondary d-none" style="max-width:440px">
+  No database found.
+  <a href="/scan?db={{ db_path }}" class="alert-link" style="color:var(--gold)">Scan your library</a> first.
+</div>
+
+<div class="table-responsive d-none" id="tbl-wrap">
+  <table class="table table-hover align-middle mb-0" id="tbl">
+    <thead>
+      <tr>
+        <th onclick="sortBy(0)">Artist<span class="arr">&#8597;</span></th>
+        <th onclick="sortBy(1)">Album<span class="arr">&#8597;</span></th>
+        <th onclick="sortBy(2)" class="text-end">Year<span class="arr">&#8597;</span></th>
+        <th onclick="sortBy(3)">Format<span class="arr">&#8597;</span></th>
+        <th onclick="sortBy(4)">Quality<span class="arr">&#8597;</span></th>
+        <th onclick="sortBy(5)" class="text-end">Tracks<span class="arr">&#8597;</span></th>
+        <th onclick="sortBy(6)" class="text-end">Size<span class="arr">&#8597;</span></th>
+        <th>Find Lossless</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const DB_PATH = {{ db_path | tojson }};
+let filter = 'all', sortCol = -1, sortAsc = true;
+
+async function loadAlbums() {
+  const res  = await fetch('/api/albums?db=' + encodeURIComponent(DB_PATH));
+  const data = await res.json();
+  document.getElementById('loading').classList.add('d-none');
+  if (!data.length) {
+    document.getElementById('empty').classList.remove('d-none');
+    return;
+  }
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = data.map(r => {
+    const links = r.links.length
+      ? r.links.map(l =>
+          `<a href="${l.url}" target="_blank" rel="noopener" class="lnk-pill me-1">${l.name}</a>`
+        ).join('')
+      : '<span class="text-muted">—</span>';
+    return `<tr data-q="${r.quality_class}">
+      <td>${r.display_artist || 'Unknown Artist'}</td>
+      <td>${r.album || 'Unknown Album'}</td>
+      <td class="text-end text-muted">${r.year || '—'}</td>
+      <td>${r.formats || '—'}</td>
+      <td><span class="badge ${r.quality_class}">${r.quality_label}</span></td>
+      <td class="text-end text-muted">${r.track_count}</td>
+      <td class="text-end text-muted">${r.size_fmt}</td>
+      <td>${links}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tbl-wrap').classList.remove('d-none');
+  applyFilters();
+}
+
+function applyFilters() {
+  const q    = document.getElementById('q').value.toLowerCase();
+  const rows = [...document.querySelectorAll('#tbl tbody tr')];
+  let n = 0;
+  rows.forEach(r => {
+    let show = r.textContent.toLowerCase().includes(q);
+    const qc = r.dataset.q;
+    if (filter === 'lossy'    && qc === 'q-lossless') show = false;
+    if (filter === 'lossless' && qc !== 'q-lossless') show = false;
+    r.classList.toggle('d-none', !show);
+    if (show) n++;
+  });
+  document.getElementById('cnt').textContent = n + ' albums';
+}
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('.filter-bar .btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  applyFilters();
+}
+
+function sortBy(col) {
+  const tbody = document.querySelector('#tbl tbody');
+  const rows  = [...tbody.querySelectorAll('tr')];
+  sortAsc = sortCol === col ? !sortAsc : true;
+  sortCol = col;
+  document.querySelectorAll('thead th').forEach((th, i) => {
+    th.classList.toggle('sorted', i === col);
+    th.querySelector('.arr').textContent = i === col ? (sortAsc ? '↑' : '↓') : '↕';
+  });
+  rows.sort((a, b) => {
+    const va = a.cells[col].textContent.trim();
+    const vb = b.cells[col].textContent.trim();
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return (na - nb) * (sortAsc ? 1 : -1);
+    return va.localeCompare(vb) * (sortAsc ? 1 : -1);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  applyFilters();
+}
+
+loadAlbums();
+</script>
+{% endblock %}

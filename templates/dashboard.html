@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Music Manager{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h1 class="page-title">Dashboard</h1>
+  <p class="text-muted mb-0">Overview of your music collection</p>
+</div>
+
+{% if stats %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-sm-4 col-xl-2">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="stat-val">{{ stats.total }}</div>
+        <div class="stat-lbl">Total Tracks</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-xl-2">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="stat-val green">{{ stats.lossless }}</div>
+        <div class="stat-lbl">Lossless</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-xl-2">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="stat-val red">{{ stats.lossy }}</div>
+        <div class="stat-lbl">Lossy</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-xl-2">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="stat-val">{{ stats.pct }}%</div>
+        <div class="stat-lbl">Lossless</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-xl-2">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="stat-val plain">{{ stats.size }}</div>
+        <div class="stat-lbl">Total Size</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-xl-2">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="stat-val plain">{{ stats.duration }}</div>
+        <div class="stat-lbl">Listening Time</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2">
+  <a href="/scan?db={{ db_path }}"     class="btn btn-gold">&#8853; Scan Library</a>
+  <a href="/albums?db={{ db_path }}"   class="btn btn-outline-gold">&#9783; Browse Albums</a>
+  <a href="/organise?db={{ db_path }}" class="btn btn-outline-gold">&#8862; Organise</a>
+</div>
+
+{% else %}
+<div class="alert alert-secondary mb-4" style="max-width:520px">
+  No database found at <strong>{{ db_path }}</strong>.
+  <a href="/scan?db={{ db_path }}" class="alert-link" style="color:var(--gold)">
+    Scan your library
+  </a> to get started.
+</div>
+<a href="/scan?db={{ db_path }}" class="btn btn-gold">&#8853; Scan Library</a>
+{% endif %}
+
+{% endblock %}

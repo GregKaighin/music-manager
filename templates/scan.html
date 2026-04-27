@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Scan Library · Music Manager{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h1 class="page-title">Scan Library</h1>
+  <p class="text-muted mb-0">Index your music folder into the local database</p>
+</div>
+
+<div class="card" style="max-width:560px">
+  <div class="card-body p-4">
+
+    <div id="frm">
+      <div class="mb-3">
+        <label class="form-label small text-uppercase text-muted fw-semibold"
+               style="letter-spacing:.08em">Music Directory</label>
+        <input class="form-control" id="mdir" type="text" placeholder="E:\Music">
+        <div class="form-text">Full path to your music folder</div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label small text-uppercase text-muted fw-semibold"
+               style="letter-spacing:.08em">Database File</label>
+        <input class="form-control" id="dbp" type="text"
+               value="{{ db_path }}" placeholder="music.db">
+        <div class="form-text">Where to store the index (created if it doesn't exist)</div>
+      </div>
+      <button class="btn btn-gold" id="sbtn" onclick="startScan()">&#8853; Start Scan</button>
+    </div>
+
+    <div id="prog" class="d-none mt-4">
+      <div class="d-flex justify-content-between align-items-baseline mb-1">
+        <span id="pfile" class="text-muted small text-truncate" style="max-width:83%"></span>
+        <span id="ppct"  class="small fw-bold ms-2" style="color:var(--gold);flex-shrink:0"></span>
+      </div>
+      <div class="progress mb-1">
+        <div class="progress-bar" id="pbar" style="width:0%"></div>
+      </div>
+      <div id="pcnt" class="text-muted small"></div>
+    </div>
+
+    <div id="res" class="d-none mt-3"></div>
+
+  </div>
+</div>
+
+<script>
+async function startScan() {
+  const mdir = document.getElementById('mdir').value.trim();
+  const dbp  = document.getElementById('dbp').value.trim() || 'music.db';
+  if (!mdir) { alert('Please enter a music directory path.'); return; }
+
+  document.getElementById('sbtn').disabled = true;
+  document.getElementById('prog').classList.remove('d-none');
+  document.getElementById('res').classList.add('d-none');
+  document.getElementById('pbar').style.width = '0%';
+  document.getElementById('pfile').textContent = 'Starting…';
+  document.getElementById('ppct').textContent  = '';
+  document.getElementById('pcnt').textContent  = '';
+
+  const r = await fetch('/api/scan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({music_dir: mdir, db_path: dbp}),
+  });
+  const j = await r.json();
+
+  if (j.error) {
+    showRes('err', j.error);
+    document.getElementById('sbtn').disabled = false;
+    return;
+  }
+
+  const es = new EventSource(`/api/scan/${j.task_id}/stream`);
+  let total = 0;
+
+  es.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'total') {
+      total = msg.count;
+      document.getElementById('pcnt').textContent = `0 / ${total} files`;
+    } else if (msg.type === 'progress') {
+      const pct = total ? Math.round(msg.current / total * 100) : 0;
+      document.getElementById('pbar').style.width  = pct + '%';
+      document.getElementById('ppct').textContent  = pct + '%';
+      document.getElementById('pfile').textContent = msg.file;
+      document.getElementById('pcnt').textContent  = `${msg.current} / ${msg.total} files`;
+    } else if (msg.type === 'done') {
+      es.close();
+      document.getElementById('pbar').style.width  = '100%';
+      document.getElementById('ppct').textContent  = '100%';
+      document.getElementById('pfile').textContent = 'Complete';
+      let txt = `${msg.ok} tracks indexed`;
+      if (msg.removed) txt += ` &middot; ${msg.removed} stale entries removed`;
+      if (msg.errors)  txt += ` &middot; ${msg.errors} unreadable`;
+      showRes('ok', txt);
+      document.getElementById('sbtn').disabled = false;
+    } else if (msg.type === 'error') {
+      es.close();
+      showRes('err', msg.message);
+      document.getElementById('sbtn').disabled = false;
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    showRes('err', 'Connection lost. Check the terminal for details.');
+    document.getElementById('sbtn').disabled = false;
+  };
+}
+
+function showRes(type, html) {
+  const dbp = document.getElementById('dbp').value.trim() || 'music.db';
+  const cls = type === 'ok' ? 'alert-success' : 'alert-danger';
+  let out = `<div class="alert ${cls}">${html}</div>`;
+  if (type === 'ok') {
+    out += `<div class="d-flex gap-2 mt-2">
+      <a href="/?db=${encodeURIComponent(dbp)}"      class="btn btn-outline-gold btn-sm">&#9672; Dashboard</a>
+      <a href="/albums?db=${encodeURIComponent(dbp)}" class="btn btn-outline-gold btn-sm">&#9783; Browse Albums</a>
+    </div>`;
+  }
+  const el = document.getElementById('res');
+  el.innerHTML = out;
+  el.classList.remove('d-none');
+}
+</script>
+{% endblock %}

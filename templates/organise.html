@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Organise · Music Manager{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h1 class="page-title">Organise</h1>
+  <p class="text-muted mb-0">Copy or move files into Artist / Year&ndash;Album / Track structure</p>
+</div>
+
+<div class="row g-4 align-items-start">
+
+  <!-- Options card -->
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-body p-4">
+        <h6 class="text-muted text-uppercase mb-3" style="font-size:.72rem;letter-spacing:.1em">Options</h6>
+
+        <div class="mb-3">
+          <label class="form-label small text-uppercase text-muted fw-semibold"
+                 style="letter-spacing:.08em">Output Directory</label>
+          <input class="form-control" id="odir" type="text" placeholder="E:\Music-Organised">
+          <div class="form-text">Where to place the organised files</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label small text-uppercase text-muted fw-semibold"
+                 style="letter-spacing:.08em">Database</label>
+          <input class="form-control" id="dbp" type="text" value="{{ db_path }}">
+        </div>
+
+        <div class="form-check form-switch mb-4" style="padding-left:3rem">
+          <input class="form-check-input" type="checkbox" id="mvtog" style="width:2.5rem;height:1.3rem;cursor:pointer">
+          <label class="form-check-label ms-2" for="mvtog">
+            Move files
+            <div class="text-muted small">Off&nbsp;= copy (safe). On&nbsp;= relocate originals.</div>
+          </label>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-gold" id="prevbtn" onclick="previewPlan()">Preview Plan</button>
+          <button class="btn btn-outline-danger d-none" id="execbtn" onclick="executePlan()">Execute</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview / result panel -->
+  <div class="col-12 col-lg-7">
+    <div class="card d-none" id="prevcard">
+      <div class="card-body p-4">
+        <h6 class="text-muted text-uppercase mb-3" id="prevtitle"
+            style="font-size:.72rem;letter-spacing:.1em">Plan</h6>
+        <div id="prevcontent"></div>
+      </div>
+    </div>
+    <div id="rescard"></div>
+  </div>
+
+</div>
+
+<script>
+async function previewPlan() {
+  const odir = document.getElementById('odir').value.trim();
+  const dbp  = document.getElementById('dbp').value.trim() || 'music.db';
+  if (!odir) { alert('Please enter an output directory.'); return; }
+
+  document.getElementById('prevcard').classList.remove('d-none');
+  document.getElementById('prevtitle').textContent = 'Calculating…';
+  document.getElementById('prevcontent').innerHTML = '';
+  document.getElementById('execbtn').classList.add('d-none');
+  document.getElementById('rescard').innerHTML = '';
+
+  const res  = await fetch('/api/organise/preview', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({db_path: dbp, output_dir: odir}),
+  });
+  const data = await res.json();
+
+  if (data.error) {
+    document.getElementById('prevtitle').textContent = 'Error';
+    document.getElementById('prevcontent').innerHTML =
+      `<div class="alert alert-danger">${data.error}</div>`;
+    return;
+  }
+
+  const move = document.getElementById('mvtog').checked;
+  document.getElementById('prevtitle').textContent =
+    `${move ? 'Move' : 'Copy'} plan — ${data.total} file${data.total !== 1 ? 's' : ''}`;
+
+  if (!data.total) {
+    document.getElementById('prevcontent').innerHTML =
+      '<div class="alert alert-success">All files are already organised.</div>';
+    return;
+  }
+
+  const rows = data.plan.map(p =>
+    `<tr>
+      <td class="text-muted small text-truncate" style="max-width:180px">${p.src}</td>
+      <td class="text-muted px-2">&rarr;</td>
+      <td class="small text-truncate" style="max-width:260px">${p.dst}</td>
+    </tr>`
+  ).join('');
+
+  const extra = data.total > data.plan.length
+    ? `<p class="text-muted small mt-2 mb-0">&hellip; and ${data.total - data.plan.length} more</p>`
+    : '';
+
+  document.getElementById('prevcontent').innerHTML = `
+    <div style="max-height:320px;overflow-y:auto">
+      <table class="table table-sm mb-0" style="font-size:.9rem">${rows}</table>
+      ${extra}
+    </div>`;
+
+  document.getElementById('execbtn').classList.remove('d-none');
+}
+
+async function executePlan() {
+  const move = document.getElementById('mvtog').checked;
+  const verb = move ? 'Move' : 'Copy';
+  if (!confirm(`${verb} files now? ${move ? 'This will relocate your originals.' : 'This will copy them to the output folder.'}`)) return;
+
+  const odir = document.getElementById('odir').value.trim();
+  const dbp  = document.getElementById('dbp').value.trim() || 'music.db';
+
+  document.getElementById('execbtn').disabled = true;
+  document.getElementById('execbtn').textContent = 'Working…';
+
+  const res  = await fetch('/api/organise/execute', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({db_path: dbp, output_dir: odir, move}),
+  });
+  const data = await res.json();
+
+  document.getElementById('execbtn').disabled = false;
+  document.getElementById('execbtn').textContent = 'Execute';
+
+  if (data.error) {
+    document.getElementById('rescard').innerHTML =
+      `<div class="alert alert-danger mt-3">${data.error}</div>`;
+  } else {
+    let msg = `${data.done} file${data.done !== 1 ? 's' : ''} ${move ? 'moved' : 'copied'}`;
+    if (data.errors) msg += ` &middot; ${data.errors} error${data.errors !== 1 ? 's' : ''}`;
+    document.getElementById('rescard').innerHTML =
+      `<div class="alert alert-success mt-3">${msg}</div>`;
+    document.getElementById('execbtn').classList.add('d-none');
+  }
+}
+</script>
+{% endblock %}
